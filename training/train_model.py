@@ -1,50 +1,3 @@
-import torch
-import torch.nn as nn
-from torch.utils.data import DataLoader
-from sklearn.metrics import f1_score, roc_auc_score, brier_score_loss
-from dataset_tcn import NPZSequenceDataset, load_fold_file_list
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-import os
-
-# ======== Configurações fixas ========
-window_size = 5
-stride = 1
-batch_size = 32
-epochs = 10
-learning_rate = 0.001
-embedding_dim = 768
-num_classes = 17
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-# ======== Modelo TCN ========
-class TCNModel(nn.Module):
-    def __init__(self, input_size, output_size, num_channels, kernel_size=2, dropout=0.2):
-        super(TCNModel, self).__init__()
-        from torch.nn.utils import weight_norm
-        layers = []
-        num_levels = len(num_channels)
-        for i in range(num_levels):
-            dilation_size = 2 ** i
-            in_channels = input_size if i == 0 else num_channels[i-1]
-            out_channels = num_channels[i]
-            layers += [weight_norm(nn.Conv1d(in_channels, out_channels, kernel_size,
-                                             stride=1, padding=(kernel_size-1)*dilation_size,
-                                             dilation=dilation_size)),
-                       nn.ReLU(),
-                       nn.Dropout(dropout)]
-        self.network = nn.Sequential(*layers)
-        self.linear = nn.Linear(num_channels[-1], output_size)
-
-    def forward(self, x):
-        x = x.transpose(1, 2)
-        y = self.network(x)
-        y = y[:, :, -1]
-        out = self.linear(y)
-        return out
-
-# ======== Função de treino por fold ========
 def train_model(fold_index):
     print(f"=== Treinando Fold {fold_index} ===")
 
@@ -154,7 +107,3 @@ def train_model(fold_index):
     plt.tight_layout()
     plt.savefig(f"metrics_fold_{fold_index}.png")
     plt.close()
-
-# ======== Execução direta para teste individual ========
-if __name__ == "__main__":
-    train_model(fold_index=0)

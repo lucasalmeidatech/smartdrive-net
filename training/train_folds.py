@@ -2,13 +2,12 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from sklearn.metrics import f1_score, roc_auc_score, brier_score_loss
-from dataset_tcn import NPZSequenceDataset, load_fold_file_list
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import os
+from dataset_tcn import NPZSequenceDataset, load_fold_file_list
 
-# ======== Configurações fixas ========
+# ======== Configurações ========
 window_size = 5
 stride = 1
 batch_size = 32
@@ -38,18 +37,17 @@ class TCNModel(nn.Module):
         self.linear = nn.Linear(num_channels[-1], output_size)
 
     def forward(self, x):
-        x = x.transpose(1, 2)
+        x = x.transpose(1, 2)  # (batch, input_size, seq_len)
         y = self.network(x)
-        y = y[:, :, -1]
+        y = y[:, :, -1]  # último time step
         out = self.linear(y)
         return out
 
-# ======== Função de treino por fold ========
+# ======== Função principal por fold ========
 def train_model(fold_index):
-    print(f"=== Treinando Fold {fold_index} ===")
+    print(f"\n=== Treinando Fold {fold_index} ===")
 
-    train_files, val_files = load_fold_file_list(fold_index)
-
+    train_files, val_files = load_fold_file_list(fold_index=fold_index)
     train_dataset = NPZSequenceDataset(train_files, window_size, stride, device=device)
     val_dataset = NPZSequenceDataset(val_files, window_size, stride, device=device)
 
@@ -76,7 +74,6 @@ def train_model(fold_index):
         train_loss = 0
         correct = 0
         total = 0
-
         for X, y in train_loader:
             optimizer.zero_grad()
             outputs = model(X)
@@ -92,7 +89,7 @@ def train_model(fold_index):
         train_acc = 100 * correct / total
         print(f"Epoch {epoch+1}/{epochs} - Loss: {train_loss:.4f} - Acc: {train_acc:.2f}%")
 
-        # Validação
+        # ======== Validação ========
         model.eval()
         val_loss = 0
         val_correct = 0
@@ -137,10 +134,11 @@ def train_model(fold_index):
         metrics['auroc'].append(auroc)
         metrics['brier'].append(brier)
 
-    # Salvar métricas
+    # ======== Exportar CSV ========
     df_metrics = pd.DataFrame(metrics)
     df_metrics.to_csv(f"metrics_fold_{fold_index}.csv", index=False)
 
+    # ======== Plotar gráfico ========
     plt.figure(figsize=(10, 6))
     plt.plot(df_metrics['epoch'], df_metrics['val_acc'], label='Val Acc')
     plt.plot(df_metrics['epoch'], df_metrics['f1_macro'], label='F1 Macro')
@@ -148,13 +146,14 @@ def train_model(fold_index):
     plt.plot(df_metrics['epoch'], df_metrics['brier'], label='Brier Score')
     plt.xlabel("Época")
     plt.ylabel("Valor")
-    plt.title(f"Métricas - Fold {fold_index}")
+    plt.title(f"Métricas Fold {fold_index}")
     plt.legend()
     plt.grid(True)
     plt.tight_layout()
     plt.savefig(f"metrics_fold_{fold_index}.png")
     plt.close()
 
-# ======== Execução direta para teste individual ========
+# ======== Rodar todos os folds ========
 if __name__ == "__main__":
-    train_model(fold_index=0)
+    for fold_index in range(5):
+        train_model(fold_index)
